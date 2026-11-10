@@ -20,7 +20,7 @@ http-body-util = "0.1"
 humantime = "2"
 hyper = { version = "1", features = ["server", "client", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
-lru = "0.16"
+lru = "0.19"
 notify-rust = "4"
 rcgen = { version = "0.14", features = ["x509-parser"] }
 regex = "1"
