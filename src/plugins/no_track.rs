@@ -13,7 +13,11 @@ fn is_tracking(method: &str, route: &str) -> bool {
 
 impl Plugin for NoTrack {
     fn info(&self) -> Info {
-        Info { id: "no_track", vencord: "NoTrack", about: "Block Discord's analytics and crash reports" }
+        Info {
+            id: "no_track",
+            vencord: "NoTrack",
+            about: "Block Discord's analytics and crash reports",
+        }
     }
     fn enabled(&self, cfg: &Config) -> bool {
         cfg.plugins.no_track.enabled

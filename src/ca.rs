@@ -3,8 +3,8 @@
 
 use anyhow::{Context, Result};
 use rcgen::{
-    BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, GeneralSubtree, IsCa,
-    Issuer, KeyPair, KeyUsagePurpose, NameConstraints,
+    BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose,
+    GeneralSubtree, IsCa, Issuer, KeyPair, KeyUsagePurpose, NameConstraints,
 };
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use rustls::server::{ClientHello, ResolvesServerCert};
@@ -38,9 +38,16 @@ fn ca_params() -> Result<CertificateParams> {
     dn.push(DnType::OrganizationName, "Ashcord");
     p.distinguished_name = dn;
     p.is_ca = IsCa::Ca(BasicConstraints::Constrained(0));
-    p.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign, KeyUsagePurpose::DigitalSignature];
+    p.key_usages = vec![
+        KeyUsagePurpose::KeyCertSign,
+        KeyUsagePurpose::CrlSign,
+        KeyUsagePurpose::DigitalSignature,
+    ];
     p.name_constraints = Some(NameConstraints {
-        permitted_subtrees: CONSTRAINED_TO.iter().map(|d| GeneralSubtree::DnsName((*d).into())).collect(),
+        permitted_subtrees: CONSTRAINED_TO
+            .iter()
+            .map(|d| GeneralSubtree::DnsName((*d).into()))
+            .collect(),
         excluded_subtrees: vec![],
     });
     let now = OffsetDateTime::now_utc();
@@ -63,10 +70,16 @@ impl Authority {
             tracing::info!("created a new local CA at {}", cert_path.display());
         }
         let pem = std::fs::read_to_string(&cert_path)?;
-        let key = KeyPair::from_pem(&std::fs::read_to_string(&key_path)?).context("reading ca.key")?;
+        let key =
+            KeyPair::from_pem(&std::fs::read_to_string(&key_path)?).context("reading ca.key")?;
         let issuer = Issuer::from_ca_cert_pem(&pem, key).context("reading ca.pem")?;
         let ca_der = pem_to_der(&pem)?;
-        Ok(Authority { issuer, ca_der, ca_pem_path: cert_path, leaves: Mutex::new(HashMap::new()) })
+        Ok(Authority {
+            issuer,
+            ca_der,
+            ca_pem_path: cert_path,
+            leaves: Mutex::new(HashMap::new()),
+        })
     }
 
     /// A certificate for `host`, made on first use and kept in memory.
@@ -89,17 +102,22 @@ impl Authority {
         let signer = rustls::crypto::ring::sign::any_supported_type(&PrivateKeyDer::Pkcs8(
             PrivatePkcs8KeyDer::from(key.serialize_der()),
         ))?;
-        let ck = Arc::new(CertifiedKey::new(vec![cert.der().clone(), self.ca_der.clone()], signer));
+        let ck = Arc::new(CertifiedKey::new(
+            vec![cert.der().clone(), self.ca_der.clone()],
+            signer,
+        ));
         self.leaves.lock().unwrap().insert(host, ck.clone());
         Ok(ck)
     }
 
     pub fn server_config(self: &Arc<Self>) -> Arc<rustls::ServerConfig> {
-        let mut c = rustls::ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-            .with_safe_default_protocol_versions()
-            .expect("TLS versions")
-            .with_no_client_auth()
-            .with_cert_resolver(Arc::new(Resolver(self.clone())));
+        let mut c = rustls::ServerConfig::builder_with_provider(Arc::new(
+            rustls::crypto::ring::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .expect("TLS versions")
+        .with_no_client_auth()
+        .with_cert_resolver(Arc::new(Resolver(self.clone())));
         c.alpn_protocols = vec![b"http/1.1".to_vec()];
         Arc::new(c)
     }
@@ -131,7 +149,12 @@ fn write_private(path: &Path, data: &[u8]) -> Result<()> {
     {
         use std::io::Write;
         use std::os::unix::fs::OpenOptionsExt;
-        let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?;
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)?;
         f.write_all(data)?;
         Ok(())
     }
@@ -152,9 +175,12 @@ mod tests {
     fn verifier(a: &Authority) -> Arc<WebPkiServerVerifier> {
         let mut roots = rustls::RootCertStore::empty();
         roots.add(a.ca_der.clone()).unwrap();
-        WebPkiServerVerifier::builder_with_provider(Arc::new(roots), Arc::new(rustls::crypto::ring::default_provider()))
-            .build()
-            .unwrap()
+        WebPkiServerVerifier::builder_with_provider(
+            Arc::new(roots),
+            Arc::new(rustls::crypto::ring::default_provider()),
+        )
+        .build()
+        .unwrap()
     }
 
     #[test]
@@ -167,8 +193,14 @@ mod tests {
         let v = verifier(&a);
         for host in ["discord.com", "gateway.discord.gg", "canary.discord.com"] {
             let leaf = b.leaf(host).unwrap();
-            v.verify_server_cert(&leaf.cert[0], &[], &ServerName::try_from(host).unwrap(), &[], UnixTime::now())
-                .unwrap_or_else(|e| panic!("{host}: {e}"));
+            v.verify_server_cert(
+                &leaf.cert[0],
+                &[],
+                &ServerName::try_from(host).unwrap(),
+                &[],
+                UnixTime::now(),
+            )
+            .unwrap_or_else(|e| panic!("{host}: {e}"));
         }
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -185,7 +217,10 @@ mod tests {
             &[],
             UnixTime::now(),
         );
-        assert!(r.is_err(), "a certificate for example.com must not validate");
+        assert!(
+            r.is_err(),
+            "a certificate for example.com must not validate"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 }

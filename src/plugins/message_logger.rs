@@ -23,7 +23,9 @@ pub struct MessageLogger {
 
 impl Default for MessageLogger {
     fn default() -> Self {
-        MessageLogger { cache: Mutex::new(None) }
+        MessageLogger {
+            cache: Mutex::new(None),
+        }
     }
 }
 
@@ -32,7 +34,11 @@ const MAX_HISTORY: usize = 5;
 
 fn one_line(s: &str, max: usize) -> String {
     let flat: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
-    if flat.chars().count() > max { format!("{}…", flat.chars().take(max).collect::<String>()) } else { flat }
+    if flat.chars().count() > max {
+        format!("{}…", flat.chars().take(max).collect::<String>())
+    } else {
+        flat
+    }
 }
 
 fn annotate(content: &str, history: &[String]) -> String {
@@ -62,10 +68,18 @@ impl MessageLogger {
 
     fn remember(&self, cx: &Cx, msg: &Val) {
         let Some(id) = msg.id_at(&["id"]) else { return };
-        self.with_cache(cx.cfg.plugins.message_logger.cache_size, |c| match c.get_mut(&id) {
-            Some(e) => e.msg = msg.clone(),
-            None => {
-                c.put(id, Entry { msg: msg.clone(), history: Vec::new() });
+        self.with_cache(cx.cfg.plugins.message_logger.cache_size, |c| {
+            match c.get_mut(&id) {
+                Some(e) => e.msg = msg.clone(),
+                None => {
+                    c.put(
+                        id,
+                        Entry {
+                            msg: msg.clone(),
+                            history: Vec::new(),
+                        },
+                    );
+                }
             }
         });
     }
@@ -88,7 +102,10 @@ impl MessageLogger {
         let path = cx.paths.message_log();
         let write = || -> std::io::Result<()> {
             std::fs::create_dir_all(path.parent().unwrap())?;
-            let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&path)?;
+            let mut f = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)?;
             writeln!(f, "{line}")
         };
         if let Err(e) = write() {
@@ -105,15 +122,28 @@ impl MessageLogger {
         self.log(cx, "deleted", &msg, None);
         let mut shown = msg.clone();
         let text = msg.str_at(&["content"]).unwrap_or("");
-        let body = if text.is_empty() { DELETED.to_string() } else { format!("{DELETED}\n{text}") };
-        shown.set("content", msg.get("content").map(|c| c.str_like(&annotate(&body, &history))).unwrap_or(Val::Str(body)));
+        let body = if text.is_empty() {
+            DELETED.to_string()
+        } else {
+            format!("{DELETED}\n{text}")
+        };
+        shown.set(
+            "content",
+            msg.get("content")
+                .map(|c| c.str_like(&annotate(&body, &history)))
+                .unwrap_or(Val::Str(body)),
+        );
         Some(shown)
     }
 }
 
 impl Plugin for MessageLogger {
     fn info(&self) -> Info {
-        Info { id: "message_logger", vencord: "MessageLogger", about: "Keep deleted messages visible and show edit history" }
+        Info {
+            id: "message_logger",
+            vencord: "MessageLogger",
+            about: "Keep deleted messages visible and show edit history",
+        }
     }
     fn enabled(&self, cfg: &Config) -> bool {
         cfg.plugins.message_logger.enabled
@@ -132,7 +162,9 @@ impl Plugin for MessageLogger {
         }
     }
     fn on_dispatch(&self, cx: &mut Cx, d: &mut Dispatch) {
-        let Some(t) = d.event().map(str::to_string) else { return };
+        let Some(t) = d.event().map(str::to_string) else {
+            return;
+        };
         match t.as_str() {
             "MESSAGE_CREATE" => {
                 if let Some(m) = d.payload.get("d") {
@@ -140,9 +172,13 @@ impl Plugin for MessageLogger {
                 }
             }
             "MESSAGE_UPDATE" => {
-                let Some(m) = d.payload.get("d").cloned() else { return };
+                let Some(m) = d.payload.get("d").cloned() else {
+                    return;
+                };
                 let Some(id) = m.id_at(&["id"]) else { return };
-                let Some(new) = m.str_at(&["content"]).map(str::to_string) else { return };
+                let Some(new) = m.str_at(&["content"]).map(str::to_string) else {
+                    return;
+                };
                 let o = cx.cfg.plugins.message_logger.clone();
                 let size = o.cache_size;
                 let skip = self.skip(cx, &m);
@@ -165,19 +201,28 @@ impl Plugin for MessageLogger {
                     && let Some(data) = d.data()
                 {
                     let shown = annotate(&new, &history);
-                    let v = data.get("content").map(|c| c.str_like(&shown)).unwrap_or(Val::Str(shown));
+                    let v = data
+                        .get("content")
+                        .map(|c| c.str_like(&shown))
+                        .unwrap_or(Val::Str(shown));
                     data.set("content", v);
                     d.changed = true;
                 }
             }
             "MESSAGE_DELETE" => {
-                let Some(id) = d.payload.id_at(&["d", "id"]) else { return };
+                let Some(id) = d.payload.id_at(&["d", "id"]) else {
+                    return;
+                };
                 if let Some(shown) = self.deleted(cx, id) {
                     d.rewrite("MESSAGE_UPDATE", shown);
                 }
             }
             "MESSAGE_DELETE_BULK" => {
-                let ids: Vec<Val> = d.payload.at(&["d", "ids"]).map(|l| l.as_list().to_vec()).unwrap_or_default();
+                let ids: Vec<Val> = d
+                    .payload
+                    .at(&["d", "ids"])
+                    .map(|l| l.as_list().to_vec())
+                    .unwrap_or_default();
                 let template = d.payload.clone();
                 let mut shown = Vec::new();
                 let mut gone = Vec::new();
@@ -191,7 +236,10 @@ impl Plugin for MessageLogger {
                 let Some(first) = shown.next() else { return };
                 let event = |t: &str, data: Val| {
                     let mut p = template.clone();
-                    let tv = p.get("t").map(|v| v.str_like(t)).unwrap_or(Val::Str(t.into()));
+                    let tv = p
+                        .get("t")
+                        .map(|v| v.str_like(t))
+                        .unwrap_or(Val::Str(t.into()));
                     p.set("t", tv);
                     p.set("d", data);
                     p
@@ -228,13 +276,22 @@ mod tests {
         let mut w = world();
         let p = MessageLogger::default();
         w.dispatch(&p, r#"{"op":0,"s":5,"t":"MESSAGE_CREATE","d":{"id":"50","channel_id":"9","content":"hej","author":{"id":"2"}}}"#);
-        let d = w.dispatch(&p, r#"{"op":0,"s":6,"t":"MESSAGE_DELETE","d":{"id":"50","channel_id":"9"}}"#);
+        let d = w.dispatch(
+            &p,
+            r#"{"op":0,"s":6,"t":"MESSAGE_DELETE","d":{"id":"50","channel_id":"9"}}"#,
+        );
         assert!(d.changed);
         assert_eq!(d.event(), Some("MESSAGE_UPDATE"));
-        assert_eq!(d.payload.str_at(&["d", "content"]), Some("-# 🗑 deleted\nhej"));
+        assert_eq!(
+            d.payload.str_at(&["d", "content"]),
+            Some("-# 🗑 deleted\nhej")
+        );
         assert_eq!(d.payload.get("s").and_then(Val::as_i64), Some(6));
         // Unknown messages are left alone.
-        let d = w.dispatch(&p, r#"{"op":0,"t":"MESSAGE_DELETE","d":{"id":"51","channel_id":"9"}}"#);
+        let d = w.dispatch(
+            &p,
+            r#"{"op":0,"t":"MESSAGE_DELETE","d":{"id":"51","channel_id":"9"}}"#,
+        );
         assert!(!d.changed);
     }
 
@@ -244,13 +301,22 @@ mod tests {
         let p = MessageLogger::default();
         w.dispatch(&p, r#"{"op":0,"t":"MESSAGE_CREATE","d":{"id":"60","channel_id":"9","content":"v1","author":{"id":"2"}}}"#);
         let d = w.dispatch(&p, r#"{"op":0,"t":"MESSAGE_UPDATE","d":{"id":"60","channel_id":"9","content":"v2","author":{"id":"2"}}}"#);
-        assert_eq!(d.payload.str_at(&["d", "content"]), Some("v2\n-# ✏ was: v1"));
+        assert_eq!(
+            d.payload.str_at(&["d", "content"]),
+            Some("v2\n-# ✏ was: v1")
+        );
         // Embed-only updates (no content) don't count as edits.
-        let d = w.dispatch(&p, r#"{"op":0,"t":"MESSAGE_UPDATE","d":{"id":"60","channel_id":"9","embeds":[]}}"#);
+        let d = w.dispatch(
+            &p,
+            r#"{"op":0,"t":"MESSAGE_UPDATE","d":{"id":"60","channel_id":"9","embeds":[]}}"#,
+        );
         assert!(!d.changed);
 
         w.dispatch(&p, r#"{"op":0,"t":"MESSAGE_CREATE","d":{"id":"61","channel_id":"9","content":"mine","author":{"id":"1"}}}"#);
-        let d = w.dispatch(&p, r#"{"op":0,"t":"MESSAGE_DELETE","d":{"id":"61","channel_id":"9"}}"#);
+        let d = w.dispatch(
+            &p,
+            r#"{"op":0,"t":"MESSAGE_DELETE","d":{"id":"61","channel_id":"9"}}"#,
+        );
         assert!(!d.changed, "own deletions stay deleted with ignore_self");
     }
 
@@ -261,10 +327,16 @@ mod tests {
         for id in ["70", "71"] {
             w.dispatch(&p, &format!(r#"{{"op":0,"t":"MESSAGE_CREATE","d":{{"id":"{id}","channel_id":"9","content":"m{id}","author":{{"id":"2"}}}}}}"#));
         }
-        let d = w.dispatch(&p, r#"{"op":0,"t":"MESSAGE_DELETE_BULK","d":{"ids":["70","71","72"],"channel_id":"9"}}"#);
+        let d = w.dispatch(
+            &p,
+            r#"{"op":0,"t":"MESSAGE_DELETE_BULK","d":{"ids":["70","71","72"],"channel_id":"9"}}"#,
+        );
         assert_eq!(d.event(), Some("MESSAGE_UPDATE"));
         assert_eq!(d.extra.len(), 2);
-        assert_eq!(d.extra[0].str_at(&["d", "content"]), Some("-# 🗑 deleted\nm71"));
+        assert_eq!(
+            d.extra[0].str_at(&["d", "content"]),
+            Some("-# 🗑 deleted\nm71")
+        );
         assert_eq!(d.extra[1].str_at(&["t"]), Some("MESSAGE_DELETE_BULK"));
         assert_eq!(d.extra[1].at(&["d", "ids"]).unwrap().as_list().len(), 1);
     }
@@ -273,9 +345,14 @@ mod tests {
     fn learns_from_fetched_history() {
         let mut w = world();
         let p = MessageLogger::default();
-        let body = crate::plugins::testing::j(r#"[{"id":"80","channel_id":"9","content":"old","author":{"id":"2"}}]"#);
+        let body = crate::plugins::testing::j(
+            r#"[{"id":"80","channel_id":"9","content":"old","author":{"id":"2"}}]"#,
+        );
         p.on_response(&mut w.cx(), "GET", "/channels/9/messages", &body);
-        let d = w.dispatch(&p, r#"{"op":0,"t":"MESSAGE_DELETE","d":{"id":"80","channel_id":"9"}}"#);
+        let d = w.dispatch(
+            &p,
+            r#"{"op":0,"t":"MESSAGE_DELETE","d":{"id":"80","channel_id":"9"}}"#,
+        );
         assert!(d.changed);
     }
 }

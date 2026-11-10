@@ -31,17 +31,21 @@ pub struct Stats {
     pub undecodable: std::sync::atomic::AtomicU64,
 }
 
-pub fn upstream_tls(extra_root: Option<rustls::pki_types::CertificateDer<'static>>) -> Arc<rustls::ClientConfig> {
+pub fn upstream_tls(
+    extra_root: Option<rustls::pki_types::CertificateDer<'static>>,
+) -> Arc<rustls::ClientConfig> {
     let mut roots = rustls::RootCertStore::empty();
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     if let Some(r) = extra_root {
         let _ = roots.add(r);
     }
-    let mut c = rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-        .with_safe_default_protocol_versions()
-        .expect("TLS versions")
-        .with_root_certificates(roots)
-        .with_no_client_auth();
+    let mut c = rustls::ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .expect("TLS versions")
+    .with_root_certificates(roots)
+    .with_no_client_auth();
     c.alpn_protocols = vec![b"http/1.1".to_vec()];
     Arc::new(c)
 }
@@ -94,7 +98,10 @@ impl App {
     }
 
     fn active(&self, cfg: &Config) -> impl Iterator<Item = &dyn Plugin> {
-        self.plugins.iter().map(|p| p.as_ref()).filter(move |p| p.enabled(cfg))
+        self.plugins
+            .iter()
+            .map(|p| p.as_ref())
+            .filter(move |p| p.enabled(cfg))
     }
 
     pub fn gateway_active(&self) -> bool {
@@ -116,10 +123,19 @@ impl App {
         let cfg = self.cfg();
         let mut account = self.account.lock().unwrap();
         account.record_request(&req.method, &req.route, req.body.as_ref());
-        let mut cx = Cx { cfg: &cfg, account: &mut account, paths: &self.paths };
+        let mut cx = Cx {
+            cfg: &cfg,
+            account: &mut account,
+            paths: &self.paths,
+        };
         for p in self.active(&cfg) {
             if let Some(status) = p.on_request(&mut cx, req) {
-                tracing::debug!("{}: answered {} {} locally ({status})", p.info().id, req.method, req.route);
+                tracing::debug!(
+                    "{}: answered {} {} locally ({status})",
+                    p.info().id,
+                    req.method,
+                    req.route
+                );
                 return Some(status);
             }
         }
@@ -129,7 +145,11 @@ impl App {
     pub fn on_response(&self, method: &str, route: &str, body: &Val) {
         let cfg = self.cfg();
         let mut account = self.account.lock().unwrap();
-        let mut cx = Cx { cfg: &cfg, account: &mut account, paths: &self.paths };
+        let mut cx = Cx {
+            cfg: &cfg,
+            account: &mut account,
+            paths: &self.paths,
+        };
         for p in self.active(&cfg) {
             p.on_response(&mut cx, method, route, body);
         }
@@ -143,8 +163,17 @@ impl App {
         {
             account.track(t, d);
         }
-        let mut d = Dispatch { payload, extra: Vec::new(), changed: false, drop: false };
-        let mut cx = Cx { cfg: &cfg, account: &mut account, paths: &self.paths };
+        let mut d = Dispatch {
+            payload,
+            extra: Vec::new(),
+            changed: false,
+            drop: false,
+        };
+        let mut cx = Cx {
+            cfg: &cfg,
+            account: &mut account,
+            paths: &self.paths,
+        };
         for p in self.active(&cfg) {
             p.on_dispatch(&mut cx, &mut d);
             if d.drop {
@@ -157,7 +186,11 @@ impl App {
     pub fn on_send(&self, payload: &mut Val) -> bool {
         let cfg = self.cfg();
         let mut account = self.account.lock().unwrap();
-        let mut cx = Cx { cfg: &cfg, account: &mut account, paths: &self.paths };
+        let mut cx = Cx {
+            cfg: &cfg,
+            account: &mut account,
+            paths: &self.paths,
+        };
         let mut changed = false;
         for p in self.active(&cfg) {
             changed |= p.on_send(&mut cx, payload);

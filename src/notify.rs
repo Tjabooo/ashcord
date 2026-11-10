@@ -7,7 +7,12 @@ pub fn desktop(title: &str, body: &str) {
     }
     let (title, body) = (title.to_string(), body.to_string());
     std::thread::spawn(move || {
-        if let Err(e) = notify_rust::Notification::new().appname("Ashcord").summary(&title).body(&body).show() {
+        if let Err(e) = notify_rust::Notification::new()
+            .appname("Ashcord")
+            .summary(&title)
+            .body(&body)
+            .show()
+        {
             tracing::warn!("notification failed: {e}");
         }
     });

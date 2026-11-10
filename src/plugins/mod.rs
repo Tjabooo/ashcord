@@ -44,7 +44,11 @@ impl Dispatch {
     }
     /// Replace this event with another event type and data, keeping the sequence number.
     pub fn rewrite(&mut self, t: &str, d: Val) {
-        let tv = self.payload.get("t").map(|v| v.str_like(t)).unwrap_or(Val::Str(t.into()));
+        let tv = self
+            .payload
+            .get("t")
+            .map(|v| v.str_like(t))
+            .unwrap_or(Val::Str(t.into()));
         self.payload.set("t", tv);
         self.payload.set("d", d);
         self.changed = true;
@@ -137,19 +141,37 @@ pub mod testing {
 
     impl World {
         pub fn new() -> World {
-            let dir = std::env::temp_dir().join(format!("ashcord-test-{}-{:?}", std::process::id(), std::thread::current().id()));
+            let dir = std::env::temp_dir().join(format!(
+                "ashcord-test-{}-{:?}",
+                std::process::id(),
+                std::thread::current().id()
+            ));
             World {
                 cfg: Config::default(),
                 account: Account::default(),
-                paths: Paths { config: dir.join("config.toml"), data: dir },
+                paths: Paths {
+                    config: dir.join("config.toml"),
+                    data: dir,
+                },
             }
         }
         pub fn cx(&mut self) -> Cx<'_> {
-            Cx { cfg: &self.cfg, account: &mut self.account, paths: &self.paths }
+            Cx {
+                cfg: &self.cfg,
+                account: &mut self.account,
+                paths: &self.paths,
+            }
         }
         pub fn dispatch(&mut self, p: &dyn Plugin, payload: &str) -> Dispatch {
-            let mut d = Dispatch { payload: j(payload), extra: vec![], changed: false, drop: false };
-            if let (Some(t), Some(data)) = (d.event().map(str::to_string), d.payload.get("d").cloned()) {
+            let mut d = Dispatch {
+                payload: j(payload),
+                extra: vec![],
+                changed: false,
+                drop: false,
+            };
+            if let (Some(t), Some(data)) =
+                (d.event().map(str::to_string), d.payload.get("d").cloned())
+            {
                 self.account.track(&t, &data);
             }
             p.on_dispatch(&mut self.cx(), &mut d);
@@ -164,7 +186,10 @@ mod tests {
 
     #[test]
     fn routes() {
-        assert_eq!(route_of("/api/v9/channels/1/messages"), "/channels/1/messages");
+        assert_eq!(
+            route_of("/api/v9/channels/1/messages"),
+            "/channels/1/messages"
+        );
         assert_eq!(route_of("/api/science"), "/science");
         assert_eq!(route_of("/assets/app.js"), "/assets/app.js");
         assert_eq!(message_route_channel("/channels/42/messages"), Some(42));
@@ -181,7 +206,11 @@ mod tests {
         assert_eq!(ids.len(), n);
         let cfg = Config::default();
         for p in all() {
-            assert!(cfg.plugin_enabled(p.info().id).is_some(), "{} has no config section", p.info().id);
+            assert!(
+                cfg.plugin_enabled(p.info().id).is_some(),
+                "{} has no config section",
+                p.info().id
+            );
         }
     }
 }

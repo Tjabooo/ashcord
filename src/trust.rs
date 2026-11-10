@@ -9,7 +9,10 @@ fn run(cmd: &mut Command) -> Result<()> {
     let what = format!("{cmd:?}");
     let out = cmd.output().with_context(|| format!("running {what}"))?;
     if !out.status.success() {
-        bail!("{what} failed: {}", String::from_utf8_lossy(&out.stderr).trim());
+        bail!(
+            "{what} failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
     }
     Ok(())
 }
@@ -19,7 +22,11 @@ fn run(cmd: &mut Command) -> Result<()> {
 fn nss_dbs() -> Vec<PathBuf> {
     let home = dirs::home_dir().unwrap_or_default();
     let mut v = vec![home.join(".pki/nssdb")];
-    for app in ["com.discordapp.Discord", "com.discordapp.DiscordCanary", "dev.vencord.Vesktop"] {
+    for app in [
+        "com.discordapp.Discord",
+        "com.discordapp.DiscordCanary",
+        "dev.vencord.Vesktop",
+    ] {
         let base = home.join(".var/app").join(app);
         if base.exists() {
             v.push(base.join(".pki/nssdb"));
@@ -36,12 +43,17 @@ pub fn install(ca: &Path) -> Result<()> {
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         if Command::new("certutil").arg("-H").output().is_err() {
-            bail!("`certutil` is missing: install NSS tools (Arch: nss, Debian/Ubuntu: libnss3-tools, Fedora: nss-tools)");
+            bail!(
+                "`certutil` is missing: install NSS tools (Arch: nss, Debian/Ubuntu: libnss3-tools, Fedora: nss-tools)"
+            );
         }
         for db in nss_dbs() {
             if !db.join("cert9.db").exists() {
                 std::fs::create_dir_all(&db)?;
-                run(Command::new("certutil").arg("-d").arg(format!("sql:{}", db.display())).args(["-N", "--empty-password"]))?;
+                run(Command::new("certutil")
+                    .arg("-d")
+                    .arg(format!("sql:{}", db.display()))
+                    .args(["-N", "--empty-password"]))?;
             }
             run(Command::new("certutil")
                 .arg("-d")
@@ -60,13 +72,20 @@ pub fn install(ca: &Path) -> Result<()> {
     #[cfg(windows)]
     {
         // Current-user store: no admin needed; Windows asks you to confirm once.
-        run(Command::new("certutil").args(["-user", "-addstore", "Root"]).arg(ca))?;
+        run(Command::new("certutil")
+            .args(["-user", "-addstore", "Root"])
+            .arg(ca))?;
         println!("trusted in your Windows certificate store (Current User > Trusted Root)");
     }
     #[cfg(target_os = "macos")]
     {
-        let kc = dirs::home_dir().unwrap_or_default().join("Library/Keychains/login.keychain-db");
-        run(Command::new("security").args(["add-trusted-cert", "-r", "trustRoot", "-k"]).arg(kc).arg(ca))?;
+        let kc = dirs::home_dir()
+            .unwrap_or_default()
+            .join("Library/Keychains/login.keychain-db");
+        run(Command::new("security")
+            .args(["add-trusted-cert", "-r", "trustRoot", "-k"])
+            .arg(kc)
+            .arg(ca))?;
         println!("trusted in your login keychain");
     }
     Ok(())
@@ -76,7 +95,10 @@ pub fn uninstall() -> Result<()> {
     #[cfg(all(unix, not(target_os = "macos")))]
     for db in nss_dbs() {
         if db.join("cert9.db").exists() {
-            let _ = run(Command::new("certutil").arg("-d").arg(format!("sql:{}", db.display())).args(["-D", "-n", CA_NAME]));
+            let _ = run(Command::new("certutil")
+                .arg("-d")
+                .arg(format!("sql:{}", db.display()))
+                .args(["-D", "-n", CA_NAME]));
             println!("removed from {}", db.display());
         }
     }

@@ -69,7 +69,10 @@ impl DefaultOn for Off {
 
 impl<D: DefaultOn> Default for Toggle<D> {
     fn default() -> Self {
-        Toggle { enabled: D::ON, _d: std::marker::PhantomData }
+        Toggle {
+            enabled: D::ON,
+            _d: std::marker::PhantomData,
+        }
     }
 }
 
@@ -115,7 +118,12 @@ pub struct FakeNitro {
 
 impl Default for FakeNitro {
     fn default() -> Self {
-        FakeNitro { enabled: false, unlock_pickers: true, emoji_size: 48, hyperlinks: true }
+        FakeNitro {
+            enabled: false,
+            unlock_pickers: true,
+            emoji_size: 48,
+            hyperlinks: true,
+        }
     }
 }
 
@@ -131,7 +139,13 @@ pub struct RelationshipNotifier {
 
 impl Default for RelationshipNotifier {
     fn default() -> Self {
-        RelationshipNotifier { enabled: false, friends: true, friend_requests: true, servers: true, groups: true }
+        RelationshipNotifier {
+            enabled: false,
+            friends: true,
+            friend_requests: true,
+            servers: true,
+            groups: true,
+        }
     }
 }
 
@@ -142,12 +156,21 @@ pub struct Paths {
 
 impl Paths {
     pub fn resolve() -> Paths {
-        let config = std::env::var_os("ASHCORD_CONFIG").map(PathBuf::from).unwrap_or_else(|| {
-            dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("ashcord").join("config.toml")
-        });
+        let config = std::env::var_os("ASHCORD_CONFIG")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                dirs::config_dir()
+                    .unwrap_or_else(|| PathBuf::from("."))
+                    .join("ashcord")
+                    .join("config.toml")
+            });
         let data = std::env::var_os("ASHCORD_DATA")
             .map(PathBuf::from)
-            .unwrap_or_else(|| dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join("ashcord"));
+            .unwrap_or_else(|| {
+                dirs::data_dir()
+                    .unwrap_or_else(|| PathBuf::from("."))
+                    .join("ashcord")
+            });
         Paths { config, data }
     }
 
@@ -168,7 +191,8 @@ impl Config {
     }
 
     pub fn load(path: &Path) -> Result<Config> {
-        let text = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+        let text =
+            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
         toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))
     }
 
@@ -193,7 +217,9 @@ impl Config {
 
     pub fn set_plugin(&mut self, name: &str, on: bool) -> Result<()> {
         let mut v = serde_json::to_value(&self.plugins)?;
-        let p = v.get_mut(name).with_context(|| format!("no plugin named {name} (see `ashcord plugins`)"))?;
+        let p = v
+            .get_mut(name)
+            .with_context(|| format!("no plugin named {name} (see `ashcord plugins`)"))?;
         p["enabled"] = serde_json::Value::Bool(on);
         self.plugins = serde_json::from_value(v)?;
         Ok(())
@@ -230,8 +256,14 @@ mod tests {
         assert!(!host_matches("discord.com", "cdn.discord.com"));
         assert!(host_matches("*.discord.com", "canary.discord.com"));
         assert!(!host_matches("*.discord.com", "discord.com"));
-        assert!(host_matches("gateway-*.discord.gg", "gateway-us-east1-c.discord.gg"));
-        assert!(!host_matches("gateway-*.discord.gg", "gateway-x.evil.discord.gg"));
+        assert!(host_matches(
+            "gateway-*.discord.gg",
+            "gateway-us-east1-c.discord.gg"
+        ));
+        assert!(!host_matches(
+            "gateway-*.discord.gg",
+            "gateway-x.evil.discord.gg"
+        ));
         let c = Config::default();
         assert!(c.intercepts("Gateway.Discord.gg."));
         assert!(!c.intercepts("cdn.discordapp.com"));

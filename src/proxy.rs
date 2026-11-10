@@ -3,8 +3,8 @@
 //! through byte for byte.
 
 use crate::app::App;
-use crate::rest::{self, Body, Upstream, empty, full};
 use crate::gateway;
+use crate::rest::{self, Body, Upstream, empty, full};
 use anyhow::Result;
 use hyper::body::Incoming;
 use hyper::server::conn::http1;
@@ -31,16 +31,26 @@ pub async fn serve(app: Arc<App>, listener: TcpListener) -> Result<()> {
         let app = app.clone();
         tokio::spawn(async move {
             let svc = service_fn(move |req| front(app.clone(), req, peer));
-            if let Err(e) = http1::Builder::new().serve_connection(TokioIo::new(sock), svc).with_upgrades().await {
+            if let Err(e) = http1::Builder::new()
+                .serve_connection(TokioIo::new(sock), svc)
+                .with_upgrades()
+                .await
+            {
                 tracing::debug!("proxy connection: {e}");
             }
         });
     }
 }
 
-async fn front(app: Arc<App>, req: Request<Incoming>, _peer: SocketAddr) -> Result<Response<Body>, Infallible> {
+async fn front(
+    app: Arc<App>,
+    req: Request<Incoming>,
+    _peer: SocketAddr,
+) -> Result<Response<Body>, Infallible> {
     if req.method() != Method::CONNECT {
-        let mut r = Response::new(full("Ashcord is an HTTPS proxy: use it as the client's proxy (CONNECT).\n"));
+        let mut r = Response::new(full(
+            "Ashcord is an HTTPS proxy: use it as the client's proxy (CONNECT).\n",
+        ));
         *r.status_mut() = StatusCode::METHOD_NOT_ALLOWED;
         return Ok(r);
     }
@@ -58,7 +68,11 @@ async fn front(app: Arc<App>, req: Request<Incoming>, _peer: SocketAddr) -> Resu
             Err(e) => return tracing::debug!("CONNECT upgrade failed: {e}"),
         };
         let io = TokioIo::new(upgraded);
-        let result = if intercept { mitm(app, io, host.clone()).await } else { tunnel(io, &host, port).await };
+        let result = if intercept {
+            mitm(app, io, host.clone()).await
+        } else {
+            tunnel(io, &host, port).await
+        };
         if let Err(e) = result {
             tracing::debug!("{host}:{port}: {e:#}");
         }
@@ -74,7 +88,9 @@ async fn tunnel(mut io: TokioIo<hyper::upgrade::Upgraded>, host: &str, port: u16
 }
 
 async fn mitm(app: Arc<App>, io: TokioIo<hyper::upgrade::Upgraded>, host: String) -> Result<()> {
-    let tls = tokio_rustls::TlsAcceptor::from(app.server_tls.clone()).accept(io).await?;
+    let tls = tokio_rustls::TlsAcceptor::from(app.server_tls.clone())
+        .accept(io)
+        .await?;
     let upstream = Arc::new(Upstream::new(host.clone(), app.upstream_tls.clone()));
     let svc = service_fn(move |req: Request<Incoming>| {
         let (app, upstream, host) = (app.clone(), upstream.clone(), host.clone());
@@ -91,6 +107,9 @@ async fn mitm(app: Arc<App>, io: TokioIo<hyper::upgrade::Upgraded>, host: String
             }
         }
     });
-    http1::Builder::new().serve_connection(TokioIo::new(tls), svc).with_upgrades().await?;
+    http1::Builder::new()
+        .serve_connection(TokioIo::new(tls), svc)
+        .with_upgrades()
+        .await?;
     Ok(())
 }

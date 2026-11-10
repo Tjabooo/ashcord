@@ -88,7 +88,10 @@ impl Val {
 
     pub fn get_mut(&mut self, key: &str) -> Option<&mut Val> {
         match self {
-            Val::Map(m) => m.iter_mut().find(|(k, _)| Self::key_is(k, key)).map(|(_, v)| v),
+            Val::Map(m) => m
+                .iter_mut()
+                .find(|(k, _)| Self::key_is(k, key))
+                .map(|(_, v)| v),
             _ => None,
         }
     }
@@ -145,7 +148,11 @@ impl Val {
             }
             J::String(s) => Val::Str(s),
             J::Array(a) => Val::List(a.into_iter().map(Val::from_json).collect()),
-            J::Object(o) => Val::Map(o.into_iter().map(|(k, v)| (Val::Str(k), Val::from_json(v))).collect()),
+            J::Object(o) => Val::Map(
+                o.into_iter()
+                    .map(|(k, v)| (Val::Str(k), Val::from_json(v)))
+                    .collect(),
+            ),
         }
     }
 
@@ -155,8 +162,12 @@ impl Val {
             Val::Null => J::Null,
             Val::Bool(b) => J::Bool(*b),
             Val::Int(n) => J::from(*n),
-            Val::Big(n) => u64::try_from(*n).map(J::from).unwrap_or_else(|_| J::String(n.to_string())),
-            Val::Float(f) => serde_json::Number::from_f64(*f).map(J::Number).unwrap_or(J::Null),
+            Val::Big(n) => u64::try_from(*n)
+                .map(J::from)
+                .unwrap_or_else(|_| J::String(n.to_string())),
+            Val::Float(f) => serde_json::Number::from_f64(*f)
+                .map(J::Number)
+                .unwrap_or(J::Null),
             Val::Str(s) | Val::Atom(s) => J::String(s.clone()),
             Val::Bin(b) | Val::Charlist(b) => J::String(String::from_utf8_lossy(b).into_owned()),
             Val::List(v) | Val::Tuple(v) => J::Array(v.iter().map(Val::to_json).collect()),

@@ -112,7 +112,9 @@ impl<'a> Reader<'a> {
                 Val::Float(f64::from_be_bytes(b.try_into()?))
             }
             FLOAT => {
-                let s = String::from_utf8_lossy(self.take(31)?).trim_end_matches('\0').to_string();
+                let s = String::from_utf8_lossy(self.take(31)?)
+                    .trim_end_matches('\0')
+                    .to_string();
                 Val::Float(s.trim().parse()?)
             }
             ATOM | ATOM_UTF8 => {
@@ -124,7 +126,11 @@ impl<'a> Reader<'a> {
                 self.atom(n)?
             }
             SMALL_TUPLE | LARGE_TUPLE => {
-                let n = if tag == SMALL_TUPLE { self.u8()? as usize } else { self.u32()? };
+                let n = if tag == SMALL_TUPLE {
+                    self.u8()? as usize
+                } else {
+                    self.u32()?
+                };
                 let mut v = Vec::with_capacity(n.min(4096));
                 for _ in 0..n {
                     v.push(self.term(depth + 1)?);
@@ -181,7 +187,10 @@ impl<'a> Reader<'a> {
                 let mut z = flate2::read::ZlibDecoder::new(rest);
                 z.read_to_end(&mut inner)?;
                 self.pos = self.buf.len();
-                let mut r = Reader { buf: &inner, pos: 0 };
+                let mut r = Reader {
+                    buf: &inner,
+                    pos: 0,
+                };
                 r.term(depth + 1)?
             }
             other => bail!("unsupported ETF tag {other}"),
@@ -202,7 +211,11 @@ fn atom(s: &str, out: &mut Vec<u8>) {
 }
 
 fn big(v: i128, out: &mut Vec<u8>) {
-    let (sign, mut mag) = if v < 0 { (1u8, v.unsigned_abs()) } else { (0u8, v as u128) };
+    let (sign, mut mag) = if v < 0 {
+        (1u8, v.unsigned_abs())
+    } else {
+        (0u8, v as u128)
+    };
     let mut digits = Vec::new();
     while mag > 0 {
         digits.push((mag & 0xff) as u8);
@@ -248,7 +261,10 @@ fn write(v: &Val, out: &mut Vec<u8>) {
             out.extend_from_slice(&(b.len() as u16).to_be_bytes());
             out.extend_from_slice(b);
         }
-        Val::Charlist(b) => write(&Val::List(b.iter().map(|c| Val::Int(*c as i64)).collect()), out),
+        Val::Charlist(b) => write(
+            &Val::List(b.iter().map(|c| Val::Int(*c as i64)).collect()),
+            out,
+        ),
         Val::List(items) => {
             if !items.is_empty() {
                 out.push(LIST);
@@ -295,14 +311,20 @@ mod tests {
                 Val::Atom("d".into()),
                 Val::Map(vec![
                     (Val::Atom("id".into()), Val::Int(1170000000000000000)),
-                    (Val::Atom("content".into()), Val::Str("hej <:ember:123>".into())),
+                    (
+                        Val::Atom("content".into()),
+                        Val::Str("hej <:ember:123>".into()),
+                    ),
                     (Val::Atom("neg".into()), Val::Int(-5)),
                     (Val::Atom("f".into()), Val::Float(1.25)),
                     (Val::Atom("nonce".into()), Val::Null),
                     (Val::Atom("pinned".into()), Val::Bool(false)),
                     (Val::Atom("empty".into()), Val::List(vec![])),
                     (Val::Atom("chars".into()), Val::Charlist(vec![1, 2, 3])),
-                    (Val::Atom("tuple".into()), Val::Tuple(vec![Val::Int(1), Val::Str("x".into())])),
+                    (
+                        Val::Atom("tuple".into()),
+                        Val::Tuple(vec![Val::Int(1), Val::Str("x".into())]),
+                    ),
                     (Val::Atom("huge".into()), Val::Big(1 << 70)),
                 ]),
             ),
@@ -321,7 +343,9 @@ mod tests {
     #[test]
     fn decodes_legacy_atoms_and_ints() {
         // {"a" => 300} with ATOM_EXT key and INTEGER_EXT value.
-        let bytes = [VERSION, MAP, 0, 0, 0, 1, ATOM, 0, 1, b'a', INTEGER, 0, 0, 1, 44];
+        let bytes = [
+            VERSION, MAP, 0, 0, 0, 1, ATOM, 0, 1, b'a', INTEGER, 0, 0, 1, 44,
+        ];
         let v = decode(&bytes).unwrap();
         assert_eq!(v.get("a"), Some(&Val::Int(300)));
     }

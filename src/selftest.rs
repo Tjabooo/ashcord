@@ -29,9 +29,14 @@ const COMBOS: &[&str] = &[
 
 /// Open a CONNECT tunnel through the proxy and do TLS trusting ONLY the local CA, so the check fails
 /// unless Ashcord really intercepted the connection.
-async fn via_proxy(proxy: &str, host: &str, only_ca: Arc<rustls::ClientConfig>) -> Result<TlsStream<TcpStream>> {
+async fn via_proxy(
+    proxy: &str,
+    host: &str,
+    only_ca: Arc<rustls::ClientConfig>,
+) -> Result<TlsStream<TcpStream>> {
     let mut s = TcpStream::connect(proxy).await?;
-    s.write_all(format!("CONNECT {host}:443 HTTP/1.1\r\nHost: {host}:443\r\n\r\n").as_bytes()).await?;
+    s.write_all(format!("CONNECT {host}:443 HTTP/1.1\r\nHost: {host}:443\r\n\r\n").as_bytes())
+        .await?;
     let mut head = Vec::new();
     let mut b = [0u8; 1];
     while !head.ends_with(b"\r\n\r\n") {
@@ -41,9 +46,14 @@ async fn via_proxy(proxy: &str, host: &str, only_ca: Arc<rustls::ClientConfig>) 
         head.push(b[0]);
     }
     if !head.starts_with(b"HTTP/1.1 200") {
-        bail!("proxy answered {}", String::from_utf8_lossy(&head).lines().next().unwrap_or(""));
+        bail!(
+            "proxy answered {}",
+            String::from_utf8_lossy(&head).lines().next().unwrap_or("")
+        );
     }
-    Ok(tokio_rustls::TlsConnector::from(only_ca).connect(ServerName::try_from(host.to_string())?, s).await?)
+    Ok(tokio_rustls::TlsConnector::from(only_ca)
+        .connect(ServerName::try_from(host.to_string())?, s)
+        .await?)
 }
 
 pub async fn run(paths: Paths) -> Result<()> {
@@ -54,10 +64,12 @@ pub async fn run(paths: Paths) -> Result<()> {
 
     let mut roots = rustls::RootCertStore::empty();
     roots.add(app.ca.ca_der.clone())?;
-    let mut cc = rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-        .with_safe_default_protocol_versions()?
-        .with_root_certificates(roots)
-        .with_no_client_auth();
+    let mut cc = rustls::ClientConfig::builder_with_provider(Arc::new(
+        rustls::crypto::ring::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()?
+    .with_root_certificates(roots)
+    .with_no_client_auth();
     cc.alpn_protocols = vec![b"http/1.1".to_vec()];
     let only_ca = Arc::new(cc);
     let mut failed = 0;
@@ -81,8 +93,14 @@ pub async fn run(paths: Paths) -> Result<()> {
     };
     match tokio::time::timeout(Duration::from_secs(15), rest).await {
         Ok(Ok(())) => println!("✓ REST: discord.com intercepted, local CA accepted, API reachable"),
-        Ok(Err(e)) => { failed += 1; println!("✗ REST: {e:#}") }
-        Err(_) => { failed += 1; println!("✗ REST: timed out") }
+        Ok(Err(e)) => {
+            failed += 1;
+            println!("✗ REST: {e:#}")
+        }
+        Err(_) => {
+            failed += 1;
+            println!("✗ REST: timed out")
+        }
     }
 
     // Gateway: every encoding × compression, decoded by Ashcord, re-encoded, decoded again here.
@@ -90,7 +108,9 @@ pub async fn run(paths: Paths) -> Result<()> {
         let one = async {
             let tls = via_proxy(&addr, "gateway.discord.gg", only_ca.clone()).await?;
             let url = format!("wss://gateway.discord.gg/?v=10&{q}");
-            let (mut ws, _) = tokio_tungstenite::client_async(url, tls).await.context("handshake")?;
+            let (mut ws, _) = tokio_tungstenite::client_async(url, tls)
+                .await
+                .context("handshake")?;
             let codec = Codec::from_query(q)?;
             let mut inflater = Inflater::new(codec.compression)?;
             loop {
@@ -113,8 +133,14 @@ pub async fn run(paths: Paths) -> Result<()> {
         };
         match tokio::time::timeout(Duration::from_secs(15), one).await {
             Ok(Ok(ms)) => println!("✓ gateway {q}: HELLO round-tripped (heartbeat {ms} ms)"),
-            Ok(Err(e)) => { failed += 1; println!("✗ gateway {q}: {e:#}") }
-            Err(_) => { failed += 1; println!("✗ gateway {q}: timed out") }
+            Ok(Err(e)) => {
+                failed += 1;
+                println!("✗ gateway {q}: {e:#}")
+            }
+            Err(_) => {
+                failed += 1;
+                println!("✗ gateway {q}: timed out")
+            }
         }
     }
     let bad = app.stats.undecodable.load(Ordering::Relaxed);
@@ -122,7 +148,10 @@ pub async fn run(paths: Paths) -> Result<()> {
         failed += 1;
         println!("✗ {bad} gateway payload(s) Ashcord could not decode");
     }
-    println!("  proxy decoded {} payload(s)", app.stats.decoded.load(Ordering::Relaxed));
+    println!(
+        "  proxy decoded {} payload(s)",
+        app.stats.decoded.load(Ordering::Relaxed)
+    );
     if failed > 0 {
         bail!("{failed} check(s) failed");
     }

@@ -6,7 +6,9 @@ use std::process::Command;
 
 fn which(name: &str) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path).map(|d| d.join(name)).find(|p| p.is_file())
+    std::env::split_paths(&path)
+        .map(|d| d.join(name))
+        .find(|p| p.is_file())
 }
 
 /// The command for `args` (or the first Discord found), told to use the proxy at `addr`.
@@ -38,7 +40,10 @@ fn detect(flag: &str) -> Result<Command> {
         }
     }
     if which("flatpak").is_some()
-        && Command::new("flatpak").args(["info", "com.discordapp.Discord"]).output().is_ok_and(|o| o.status.success())
+        && Command::new("flatpak")
+            .args(["info", "com.discordapp.Discord"])
+            .output()
+            .is_ok_and(|o| o.status.success())
     {
         let mut c = Command::new("flatpak");
         c.args(["run", "com.discordapp.Discord", flag]);
@@ -50,7 +55,11 @@ fn detect(flag: &str) -> Result<Command> {
 #[cfg(windows)]
 fn detect(flag: &str) -> Result<Command> {
     let local = dirs::data_local_dir().unwrap_or_default();
-    for (dir, exe) in [("Discord", "Discord.exe"), ("DiscordCanary", "DiscordCanary.exe"), ("DiscordPTB", "DiscordPTB.exe")] {
+    for (dir, exe) in [
+        ("Discord", "Discord.exe"),
+        ("DiscordCanary", "DiscordCanary.exe"),
+        ("DiscordPTB", "DiscordPTB.exe"),
+    ] {
         let update = local.join(dir).join("Update.exe");
         if update.is_file() {
             let mut c = Command::new(update);
@@ -59,7 +68,9 @@ fn detect(flag: &str) -> Result<Command> {
         }
     }
     let _ = which;
-    bail!("no Discord found in %LOCALAPPDATA%; pass the command: ashcord launch -- C:\\path\\to\\Discord.exe")
+    bail!(
+        "no Discord found in %LOCALAPPDATA%; pass the command: ashcord launch -- C:\\path\\to\\Discord.exe"
+    )
 }
 
 #[cfg(target_os = "macos")]

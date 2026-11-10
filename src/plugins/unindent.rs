@@ -8,7 +8,9 @@ pub struct Unindent;
 
 fn dedent_block(block: &str) -> String {
     // block = "lang\ncode..." (the text between two ``` fences).
-    let Some((first, body)) = block.split_once('\n') else { return block.to_string() };
+    let Some((first, body)) = block.split_once('\n') else {
+        return block.to_string();
+    };
     let indent = body
         .lines()
         .filter(|l| !l.trim().is_empty())
@@ -18,7 +20,16 @@ fn dedent_block(block: &str) -> String {
     if indent == 0 {
         return block.to_string();
     }
-    let lines: Vec<&str> = body.split('\n').map(|l| if l.len() >= indent { &l[indent..] } else { l.trim_start() }).collect();
+    let lines: Vec<&str> = body
+        .split('\n')
+        .map(|l| {
+            if l.len() >= indent {
+                &l[indent..]
+            } else {
+                l.trim_start()
+            }
+        })
+        .collect();
     format!("{first}\n{}", lines.join("\n"))
 }
 
@@ -31,14 +42,24 @@ pub fn unindent(content: &str) -> String {
     parts
         .iter()
         .enumerate()
-        .map(|(i, p)| if i % 2 == 1 && i < last { dedent_block(p) } else { p.to_string() })
+        .map(|(i, p)| {
+            if i % 2 == 1 && i < last {
+                dedent_block(p)
+            } else {
+                p.to_string()
+            }
+        })
         .collect::<Vec<_>>()
         .join("```")
 }
 
 impl Plugin for Unindent {
     fn info(&self) -> Info {
-        Info { id: "unindent", vencord: "Unindent", about: "Strip shared indentation from code blocks you send" }
+        Info {
+            id: "unindent",
+            vencord: "Unindent",
+            about: "Strip shared indentation from code blocks you send",
+        }
     }
     fn enabled(&self, cfg: &Config) -> bool {
         cfg.plugins.unindent.enabled
@@ -67,7 +88,10 @@ mod tests {
     #[test]
     fn dedents_code_blocks_only() {
         let s = "look:\n```rs\n    fn a() {\n        b();\n    }\n```\n    not code";
-        assert_eq!(unindent(s), "look:\n```rs\nfn a() {\n    b();\n}\n```\n    not code");
+        assert_eq!(
+            unindent(s),
+            "look:\n```rs\nfn a() {\n    b();\n}\n```\n    not code"
+        );
         assert_eq!(unindent("no ``` fence closed"), "no ``` fence closed");
         assert_eq!(unindent("```\nflat\n```"), "```\nflat\n```");
     }

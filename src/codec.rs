@@ -30,7 +30,10 @@ pub struct Codec {
 impl Codec {
     /// Read `encoding=` and `compress=` from the gateway URL query.
     pub fn from_query(query: &str) -> Result<Codec> {
-        let mut c = Codec { encoding: Encoding::Json, compression: Compression::None };
+        let mut c = Codec {
+            encoding: Encoding::Json,
+            compression: Compression::None,
+        };
         for pair in query.split('&') {
             let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
             match (k, v) {
@@ -48,7 +51,9 @@ impl Codec {
 
     pub fn decode(&self, plain: &[u8]) -> Result<Val> {
         match self.encoding {
-            Encoding::Json => Ok(Val::from_json(serde_json::from_slice(plain).context("gateway JSON")?)),
+            Encoding::Json => Ok(Val::from_json(
+                serde_json::from_slice(plain).context("gateway JSON")?,
+            )),
             Encoding::Etf => etf::decode(plain),
         }
     }
@@ -74,7 +79,10 @@ impl Inflater {
     pub fn new(c: Compression) -> Result<Inflater> {
         Ok(match c {
             Compression::None => Inflater::None,
-            Compression::Zlib => Inflater::Zlib { z: Box::new(Decompress::new(true)), buf: Vec::new() },
+            Compression::Zlib => Inflater::Zlib {
+                z: Box::new(Decompress::new(true)),
+                buf: Vec::new(),
+            },
             Compression::Zstd => Inflater::Zstd(Box::new(ZDec::new()?)),
         })
     }
@@ -94,7 +102,8 @@ impl Inflater {
                 let mut used = 0;
                 loop {
                     let (i0, o0) = (z.total_in(), z.total_out());
-                    z.decompress(&input[used..], &mut chunk, FlushDecompress::Sync).context("zlib-stream")?;
+                    z.decompress(&input[used..], &mut chunk, FlushDecompress::Sync)
+                        .context("zlib-stream")?;
                     used += (z.total_in() - i0) as usize;
                     let n = (z.total_out() - o0) as usize;
                     out.extend_from_slice(&chunk[..n]);
@@ -137,7 +146,9 @@ impl Deflater {
     pub fn new(c: Compression) -> Result<Deflater> {
         Ok(match c {
             Compression::None => Deflater::None,
-            Compression::Zlib => Deflater::Zlib(Box::new(Compress::new(flate2::Compression::new(6), true))),
+            Compression::Zlib => {
+                Deflater::Zlib(Box::new(Compress::new(flate2::Compression::new(6), true)))
+            }
             Compression::Zstd => Deflater::Zstd(Box::new(ZEnc::new(3)?)),
         })
     }
@@ -223,7 +234,13 @@ mod tests {
     #[test]
     fn parses_query() {
         let c = Codec::from_query("encoding=etf&v=9&compress=zstd-stream").unwrap();
-        assert_eq!(c, Codec { encoding: Encoding::Etf, compression: Compression::Zstd });
+        assert_eq!(
+            c,
+            Codec {
+                encoding: Encoding::Etf,
+                compression: Compression::Zstd
+            }
+        );
         assert!(Codec::from_query("encoding=xml").is_err());
     }
 }

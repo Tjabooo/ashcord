@@ -22,16 +22,34 @@ use tokio_tungstenite::tungstenite::protocol::Role;
 use tokio_tungstenite::tungstenite::{Bytes, Message};
 
 pub fn is_upgrade(req: &Request<Incoming>) -> bool {
-    req.headers().get(header::UPGRADE).is_some_and(|v| v.as_bytes().eq_ignore_ascii_case(b"websocket"))
+    req.headers()
+        .get(header::UPGRADE)
+        .is_some_and(|v| v.as_bytes().eq_ignore_ascii_case(b"websocket"))
 }
 
 /// Headers worth passing on to Discord when opening the real gateway connection.
-const FORWARD: &[header::HeaderName] = &[header::USER_AGENT, header::ORIGIN, header::ACCEPT_LANGUAGE, header::COOKIE];
+const FORWARD: &[header::HeaderName] = &[
+    header::USER_AGENT,
+    header::ORIGIN,
+    header::ACCEPT_LANGUAGE,
+    header::COOKIE,
+];
 
-pub async fn upgrade(app: Arc<App>, req: Request<Incoming>, host: String) -> Result<Response<Body>> {
-    let key = req.headers().get(header::SEC_WEBSOCKET_KEY).context("websocket upgrade without a key")?;
+pub async fn upgrade(
+    app: Arc<App>,
+    req: Request<Incoming>,
+    host: String,
+) -> Result<Response<Body>> {
+    let key = req
+        .headers()
+        .get(header::SEC_WEBSOCKET_KEY)
+        .context("websocket upgrade without a key")?;
     let accept = derive_accept_key(key.as_bytes());
-    let pq = req.uri().path_and_query().map(|p| p.as_str().to_string()).unwrap_or_else(|| "/".into());
+    let pq = req
+        .uri()
+        .path_and_query()
+        .map(|p| p.as_str().to_string())
+        .unwrap_or_else(|| "/".into());
     let codec = Codec::from_query(req.uri().query().unwrap_or(""));
 
     let mut up_req = format!("wss://{host}{pq}").into_client_request()?;
@@ -42,15 +60,20 @@ pub async fn upgrade(app: Arc<App>, req: Request<Incoming>, host: String) -> Res
     }
     let tcp = TcpStream::connect((host.as_str(), 443)).await?;
     tcp.set_nodelay(true).ok();
-    let tls = tokio_rustls::TlsConnector::from(app.upstream_tls.clone()).connect(ServerName::try_from(host.clone())?, tcp).await?;
-    let (upstream, _) = tokio_tungstenite::client_async(up_req, tls).await.context("gateway handshake")?;
+    let tls = tokio_rustls::TlsConnector::from(app.upstream_tls.clone())
+        .connect(ServerName::try_from(host.clone())?, tcp)
+        .await?;
+    let (upstream, _) = tokio_tungstenite::client_async(up_req, tls)
+        .await
+        .context("gateway handshake")?;
 
     tokio::spawn(async move {
         let upgraded = match hyper::upgrade::on(req).await {
             Ok(u) => u,
             Err(e) => return tracing::warn!("client websocket upgrade failed: {e}"),
         };
-        let client = WebSocketStream::from_raw_socket(TokioIo::new(upgraded), Role::Server, None).await;
+        let client =
+            WebSocketStream::from_raw_socket(TokioIo::new(upgraded), Role::Server, None).await;
         let result = match codec {
             Ok(c) if app.gateway_active() => bridge(app, client, upstream, c).await,
             Ok(_) => passthrough(client, upstream).await,
@@ -69,7 +92,10 @@ pub async fn upgrade(app: Arc<App>, req: Request<Incoming>, host: String) -> Res
     let h = r.headers_mut();
     h.insert(header::UPGRADE, HeaderValue::from_static("websocket"));
     h.insert(header::CONNECTION, HeaderValue::from_static("Upgrade"));
-    h.insert(header::SEC_WEBSOCKET_ACCEPT, HeaderValue::from_str(&accept)?);
+    h.insert(
+        header::SEC_WEBSOCKET_ACCEPT,
+        HeaderValue::from_str(&accept)?,
+    );
     Ok(r)
 }
 
@@ -113,17 +139,28 @@ fn frame(codec: Codec, deflater: Option<&mut Deflater>, plain: Vec<u8>) -> Resul
         return Ok(Message::Binary(Bytes::from(d.push(&plain)?)));
     }
     Ok(match codec.encoding {
-        Encoding::Json => Message::text(String::from_utf8(plain).context("gateway JSON is not UTF-8")?),
+        Encoding::Json => {
+            Message::text(String::from_utf8(plain).context("gateway JSON is not UTF-8")?)
+        }
         Encoding::Etf => Message::Binary(Bytes::from(plain)),
     })
 }
 
-pub async fn bridge<C, U>(app: Arc<App>, client: WebSocketStream<C>, upstream: WebSocketStream<U>, codec: Codec) -> Result<()>
+pub async fn bridge<C, U>(
+    app: Arc<App>,
+    client: WebSocketStream<C>,
+    upstream: WebSocketStream<U>,
+    codec: Codec,
+) -> Result<()>
 where
     C: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
     U: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    tracing::info!("gateway connected ({:?}, {:?})", codec.encoding, codec.compression);
+    tracing::info!(
+        "gateway connected ({:?}, {:?})",
+        codec.encoding,
+        codec.compression
+    );
     let (mut c_tx, mut c_rx) = client.split();
     let (mut u_tx, mut u_rx) = upstream.split();
     let mut inflater = Inflater::new(codec.compression)?;

@@ -15,9 +15,16 @@ pub fn find() -> Option<PathBuf> {
 
 /// Apply the matching plugins from a Vencord settings.json. Returns what changed, for printing.
 pub fn import(path: &Path, cfg: &mut Config) -> Result<Vec<String>> {
-    let v: Value = serde_json::from_str(&std::fs::read_to_string(path)?).with_context(|| format!("parsing {}", path.display()))?;
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(path)?)
+        .with_context(|| format!("parsing {}", path.display()))?;
     let plugins = v.get("plugins").context("no plugins in that file")?;
-    let on = |name: &str| plugins.get(name).and_then(|p| p.get("enabled")).and_then(Value::as_bool).unwrap_or(false);
+    let on = |name: &str| {
+        plugins
+            .get(name)
+            .and_then(|p| p.get("enabled"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    };
     let opt = |name: &str, key: &str| plugins.get(name).and_then(|p| p.get(key)).cloned();
     let before = cfg.clone();
 
@@ -56,12 +63,20 @@ pub fn import(path: &Path, cfg: &mut Config) -> Result<Vec<String>> {
         }
     }
     // GameActivityToggle's on/off state lives in Discord's own settings, so it isn't copied.
-    let ids = ["no_track", "silent_typing", "unindent", "message_logger", "fake_nitro", "relationship_notifier"];
+    let ids = [
+        "no_track",
+        "silent_typing",
+        "unindent",
+        "message_logger",
+        "fake_nitro",
+        "relationship_notifier",
+    ];
     Ok(ids
         .iter()
         .filter_map(|id| {
             let now = cfg.plugin_enabled(id)?;
-            (before.plugin_enabled(id) != Some(now)).then(|| format!("{id}: {}", if now { "on" } else { "off" }))
+            (before.plugin_enabled(id) != Some(now))
+                .then(|| format!("{id}: {}", if now { "on" } else { "off" }))
         })
         .collect())
 }

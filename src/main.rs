@@ -24,7 +24,11 @@ use config::{Config, Paths};
 use std::time::{Duration, Instant};
 
 #[derive(Parser)]
-#[command(name = "ashcord", version, about = "Vencord-style plugins for Discord, through a local proxy")]
+#[command(
+    name = "ashcord",
+    version,
+    about = "Vencord-style plugins for Discord, through a local proxy"
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Option<Cmd>,
@@ -69,7 +73,8 @@ enum Cmd {
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_env("ASHCORD_LOG").unwrap_or_else(|_| "ashcord=info".into()),
+            tracing_subscriber::EnvFilter::try_from_env("ASHCORD_LOG")
+                .unwrap_or_else(|_| "ashcord=info".into()),
         )
         .with_target(false)
         .init();
@@ -115,10 +120,17 @@ async fn run(paths: Paths, launch: Option<Vec<String>>) -> Result<()> {
     let listen = cfg.listen.clone();
     let app = app::App::new(paths, cfg, false)?;
     app.spawn_reloader();
-    let listener = proxy::bind(&listen).await.with_context(|| format!("listening on {listen}"))?;
+    let listener = proxy::bind(&listen)
+        .await
+        .with_context(|| format!("listening on {listen}"))?;
     tracing::info!("Ashcord listening on {listen} (plugins: {})", {
         let cfg = app.cfg();
-        app.plugins.iter().filter(|p| p.enabled(&cfg)).map(|p| p.info().id).collect::<Vec<_>>().join(", ")
+        app.plugins
+            .iter()
+            .filter(|p| p.enabled(&cfg))
+            .map(|p| p.info().id)
+            .collect::<Vec<_>>()
+            .join(", ")
     });
     let server = tokio::spawn(proxy::serve(app.clone(), listener));
 
@@ -126,7 +138,9 @@ async fn run(paths: Paths, launch: Option<Vec<String>>) -> Result<()> {
         let cmd = launch::command(&args, &listen)?;
         tracing::info!("starting {:?}", cmd.get_program());
         let started = Instant::now();
-        let mut child = tokio::process::Command::from(cmd).spawn().context("starting Discord")?;
+        let mut child = tokio::process::Command::from(cmd)
+            .spawn()
+            .context("starting Discord")?;
         tokio::select! {
             status = child.wait() => {
                 let status = status?;
@@ -155,10 +169,22 @@ fn setup(paths: &Paths) -> Result<()> {
     if let Some(v) = vencord::find() {
         let changes = vencord::import(&v, &mut cfg)?;
         cfg.save(&paths.config)?;
-        println!("imported from {}: {}", v.display(), if changes.is_empty() { "nothing new".into() } else { changes.join(", ") });
+        println!(
+            "imported from {}: {}",
+            v.display(),
+            if changes.is_empty() {
+                "nothing new".into()
+            } else {
+                changes.join(", ")
+            }
+        );
     }
     let ca = ca::Authority::load_or_create(&paths.data)?;
-    println!("local CA: {} (only valid for {})", ca.ca_pem_path.display(), ca::CONSTRAINED_TO.join(", "));
+    println!(
+        "local CA: {} (only valid for {})",
+        ca.ca_pem_path.display(),
+        ca::CONSTRAINED_TO.join(", ")
+    );
     trust::install(&ca.ca_pem_path)?;
     println!("\nDone. Quit Discord fully, then start it with `ashcord launch`.");
     Ok(())
@@ -166,20 +192,28 @@ fn setup(paths: &Paths) -> Result<()> {
 
 fn switch(paths: &Paths, name: &str, to: Option<bool>) -> Result<()> {
     let mut cfg = Config::load_or_init(&paths.config)?;
-    let now = cfg.plugin_enabled(name).with_context(|| format!("no plugin named {name} (see `ashcord plugins`)"))?;
+    let now = cfg
+        .plugin_enabled(name)
+        .with_context(|| format!("no plugin named {name} (see `ashcord plugins`)"))?;
     let on = to.unwrap_or(!now);
     cfg.set_plugin(name, on)?;
     cfg.save(&paths.config)?;
     println!("{name}: {}", if on { "on" } else { "off" });
-    let gateway = plugins::all().iter().any(|p| p.info().id == name && p.uses_gateway());
+    let gateway = plugins::all()
+        .iter()
+        .any(|p| p.info().id == name && p.uses_gateway());
     if gateway && on && !now {
-        println!("(gateway plugin: takes effect when Discord reconnects; Ctrl+R in Discord does that)");
+        println!(
+            "(gateway plugin: takes effect when Discord reconnects; Ctrl+R in Discord does that)"
+        );
     }
     Ok(())
 }
 
 fn import(paths: &Paths, path: Option<std::path::PathBuf>) -> Result<()> {
-    let path = path.or_else(vencord::find).context("no Vencord settings found; pass the path to settings.json")?;
+    let path = path
+        .or_else(vencord::find)
+        .context("no Vencord settings found; pass the path to settings.json")?;
     let mut cfg = Config::load_or_init(&paths.config)?;
     let changes = vencord::import(&path, &mut cfg)?;
     cfg.save(&paths.config)?;
@@ -203,10 +237,25 @@ fn show_log(paths: &Paths, n: usize) -> Result<()> {
     for l in &lines[lines.len().saturating_sub(n)..] {
         let v: serde_json::Value = serde_json::from_str(l).unwrap_or_default();
         let s = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
-        let place = if s("guild").is_empty() { format!("channel {}", s("channel")) } else { s("guild") };
+        let place = if s("guild").is_empty() {
+            format!("channel {}", s("channel"))
+        } else {
+            s("guild")
+        };
         match s("kind").as_str() {
-            "edited" => println!("{}  ✏ {} in {place}: {:?} → {:?}", s("time"), s("author"), s("was"), s("content")),
-            _ => println!("{}  🗑 {} in {place}: {:?}", s("time"), s("author"), s("content")),
+            "edited" => println!(
+                "{}  ✏ {} in {place}: {:?} → {:?}",
+                s("time"),
+                s("author"),
+                s("was"),
+                s("content")
+            ),
+            _ => println!(
+                "{}  🗑 {} in {place}: {:?}",
+                s("time"),
+                s("author"),
+                s("content")
+            ),
         }
     }
     Ok(())

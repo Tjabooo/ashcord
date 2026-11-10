@@ -32,8 +32,17 @@ pub fn incoming(b: Incoming) -> Body {
     b.map_err(|e| Box::new(e) as BoxError).boxed()
 }
 
-const HOP_BY_HOP: &[&str] =
-    &["connection", "keep-alive", "proxy-connection", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade"];
+const HOP_BY_HOP: &[&str] = &[
+    "connection",
+    "keep-alive",
+    "proxy-connection",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+];
 
 fn strip_hop_by_hop(h: &mut HeaderMap) {
     for name in HOP_BY_HOP {
@@ -42,7 +51,9 @@ fn strip_hop_by_hop(h: &mut HeaderMap) {
 }
 
 fn is_json(h: &HeaderMap) -> bool {
-    h.get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).is_some_and(|v| v.starts_with("application/json"))
+    h.get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.starts_with("application/json"))
 }
 
 /// One kept-alive HTTPS connection to the real host, opened on first use and re-opened when it drops.
@@ -54,14 +65,22 @@ pub struct Upstream {
 
 impl Upstream {
     pub fn new(host: String, tls: Arc<rustls::ClientConfig>) -> Upstream {
-        Upstream { host, tls, sender: tokio::sync::Mutex::new(None) }
+        Upstream {
+            host,
+            tls,
+            sender: tokio::sync::Mutex::new(None),
+        }
     }
 
     async fn connect(&self) -> Result<SendRequest<Body>> {
-        let tcp = TcpStream::connect((self.host.as_str(), 443)).await.with_context(|| format!("connecting to {}", self.host))?;
+        let tcp = TcpStream::connect((self.host.as_str(), 443))
+            .await
+            .with_context(|| format!("connecting to {}", self.host))?;
         tcp.set_nodelay(true).ok();
         let name = ServerName::try_from(self.host.clone())?;
-        let tls = tokio_rustls::TlsConnector::from(self.tls.clone()).connect(name, tcp).await?;
+        let tls = tokio_rustls::TlsConnector::from(self.tls.clone())
+            .connect(name, tcp)
+            .await?;
         let (sender, conn) = hyper::client::conn::http1::handshake(TokioIo::new(tls)).await?;
         tokio::spawn(async move {
             if let Err(e) = conn.await {
@@ -84,7 +103,11 @@ impl Upstream {
     }
 }
 
-pub async fn handle(app: Arc<App>, up: Arc<Upstream>, req: Request<Incoming>) -> Result<Response<Body>, Infallible> {
+pub async fn handle(
+    app: Arc<App>,
+    up: Arc<Upstream>,
+    req: Request<Incoming>,
+) -> Result<Response<Body>, Infallible> {
     let what = format!("{} {}", req.method(), req.uri().path());
     match forward(app, up, req).await {
         Ok(r) => Ok(r),
@@ -97,7 +120,11 @@ pub async fn handle(app: Arc<App>, up: Arc<Upstream>, req: Request<Incoming>) ->
     }
 }
 
-async fn forward(app: Arc<App>, up: Arc<Upstream>, req: Request<Incoming>) -> Result<Response<Body>> {
+async fn forward(
+    app: Arc<App>,
+    up: Arc<Upstream>,
+    req: Request<Incoming>,
+) -> Result<Response<Body>> {
     let (mut parts, body) = req.into_parts();
     let method = parts.method.as_str().to_string();
     let route = route_of(parts.uri.path());
@@ -111,7 +138,12 @@ async fn forward(app: Arc<App>, up: Arc<Upstream>, req: Request<Incoming>) -> Re
         kept = Some(b);
     }
 
-    let mut preq = PReq { method, route, body: json, body_changed: false };
+    let mut preq = PReq {
+        method,
+        route,
+        body: json,
+        body_changed: false,
+    };
     if let Some(status) = app.on_request(&mut preq) {
         let mut r = Response::new(empty());
         *r.status_mut() = StatusCode::from_u16(status).unwrap_or(StatusCode::NO_CONTENT);
@@ -121,7 +153,9 @@ async fn forward(app: Arc<App>, up: Arc<Upstream>, req: Request<Incoming>) -> Re
     let out: Body = match (preq.body_changed, preq.body, kept, stream) {
         (true, Some(v), _, _) => {
             let b = serde_json::to_vec(&v.to_json())?;
-            parts.headers.insert(header::CONTENT_LENGTH, HeaderValue::from(b.len()));
+            parts
+                .headers
+                .insert(header::CONTENT_LENGTH, HeaderValue::from(b.len()));
             full(b)
         }
         (_, _, Some(b), _) => full(b),
@@ -130,11 +164,17 @@ async fn forward(app: Arc<App>, up: Arc<Upstream>, req: Request<Incoming>) -> Re
     };
 
     strip_hop_by_hop(&mut parts.headers);
-    let pq = parts.uri.path_and_query().map(|p| p.as_str().to_string()).unwrap_or_else(|| "/".into());
+    let pq = parts
+        .uri
+        .path_and_query()
+        .map(|p| p.as_str().to_string())
+        .unwrap_or_else(|| "/".into());
     parts.uri = pq.parse()?;
     let wants_response = app.wants_response(&preq.method, &preq.route);
     if wants_response {
-        parts.headers.insert(header::ACCEPT_ENCODING, HeaderValue::from_static("gzip"));
+        parts
+            .headers
+            .insert(header::ACCEPT_ENCODING, HeaderValue::from_static("gzip"));
     }
 
     let resp = up.send(Request::from_parts(parts, out)).await?;
@@ -143,7 +183,10 @@ async fn forward(app: Arc<App>, up: Arc<Upstream>, req: Request<Incoming>) -> Re
 
     if wants_response && rp.status.is_success() && is_json(&rp.headers) {
         let raw = rb.collect().await?.to_bytes();
-        let gz = rp.headers.get(header::CONTENT_ENCODING).is_some_and(|v| v.as_bytes().eq_ignore_ascii_case(b"gzip"));
+        let gz = rp
+            .headers
+            .get(header::CONTENT_ENCODING)
+            .is_some_and(|v| v.as_bytes().eq_ignore_ascii_case(b"gzip"));
         let plain = if gz {
             let mut out = Vec::new();
             flate2::read::GzDecoder::new(&raw[..]).read_to_end(&mut out)?;
@@ -155,7 +198,8 @@ async fn forward(app: Arc<App>, up: Arc<Upstream>, req: Request<Incoming>) -> Re
             app.on_response(&preq.method, &preq.route, &Val::from_json(j));
         }
         rp.headers.remove(header::CONTENT_ENCODING);
-        rp.headers.insert(header::CONTENT_LENGTH, HeaderValue::from(plain.len()));
+        rp.headers
+            .insert(header::CONTENT_LENGTH, HeaderValue::from(plain.len()));
         return Ok(Response::from_parts(rp, full(plain)));
     }
     Ok(Response::from_parts(rp, incoming(rb)))
